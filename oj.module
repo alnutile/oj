@@ -17,19 +17,10 @@ function og_add_nodes_for_user($order){
     //Use the product id to see if this
     //Product has a related entry in the db for 
     //Counts and Types
-    $exists = db_query("SELECT count, type FROM {oj_count_and_type} WHERE etid = :id", array(':id' => $key))->fetchAll();
-    watchdog('See what is found', print_r($exists, 1));
-    /*
-    if  (isset($product->field_number_of_nodes_to_create) && isset($product->field_node_type_to_create)) {
-      //Now to check if it has data
-      if (array_key_exists('und', $product->field_number_of_nodes_to_create)) {
-        $number = $product->field_number_of_nodes_to_create['und'][0]['value'];
-        $type = $product->field_node_type_to_create['und'][0]['value'];
-        //Make the nodes
-        og_make_nodes($type, $number, $order);
-      }
+    $exists = db_query("SELECT count, type, title FROM {oj_count_and_type} WHERE nid = :id", array(':id' => $key->nid))->fetchAll();
+    if(count($exists)){
+     og_make_nodes($exists[0]->type, $exists[0]->count, $exists[0]->title, $order); 
     }
-    */
   }
 } 
 
@@ -40,9 +31,8 @@ function og_add_nodes_for_user($order){
  * @param howmany
  * @param order object to get user
  */
-function og_make_nodes($type, $howmany, $order) {
+function og_make_nodes($type, $howmany, $title, $order) {
   $account = user_load($order->uid);
-  $title = variable_get('og_mem_title', 'Unpublished Token ');
   if($howmany > 0) {
     $start = 1;
     for($start; $start <= $howmany; $start++){
@@ -71,10 +61,11 @@ function oj_user_nodes($account){
   $header = array(
     array('data' => t('Title')),
     array('data' => t('View')),
+    array('data' => t('Status')),
   );
   
   $query = db_select('node', 'n')->extend('PagerDefault');
-  $query->fields('n', array('nid', 'title'));
+  $query->fields('n', array('nid', 'title', 'status'));
   $query->condition('n.uid', $account->uid, '=');
   $result = $query
     ->limit(20) 
@@ -85,7 +76,8 @@ function oj_user_nodes($account){
   foreach($result as $row){
     $link = l($row->title, 'node/' . $row->nid);
     $view = l('view', 'node/' . $row->nid);
-    $rows[] = array('data' => array($link, $view));
+    $status = ($row->status == 0) ? 'UnPublished' : 'Published';
+    $rows[] = array('data' => array($link, $view, $status));
   }
   
   $build['pager_table'] = array(
@@ -129,12 +121,14 @@ function oj_form_alter(&$form, $form_state, $form_id) {
       '#type' => 'select',
       '#options' => drupal_map_assoc($options),
       '#default_value' => isset($node->oj_count) ? $node->oj_count : '',
+      '#title' => t('How many nodes to make'),
     );
     //Add the type field
     $options = node_type_get_names();
     unset($options['product']);
     $form['oj_type'] = array(
       '#type' => 'select',
+      '#title' => t('Node type to make'),
       '#options' => $options,
       '#empty_value' => '99999',
       '#empty_option' => '--select--',
@@ -142,6 +136,7 @@ function oj_form_alter(&$form, $form_state, $form_id) {
     );    
     $form['oj_title'] = array(
       '#type' => 'textfield',
+      '#title' => t('Default Title for the new nodes'),
       '#default_value' => isset($node->oj_title) ? $node->oj_title : '',
     );   
 
@@ -166,7 +161,7 @@ function oj_node_load($nodes, $types) {
   // When we read, we don't care about the node->nid; we look for the right
   // revision ID (node->vid).
   $result = db_select('oj_count_and_type', 'oj')
-  ->fields('oj', array('nid', 'vid', 'count', 'type'))
+  ->fields('oj', array('nid', 'vid', 'count', 'type', 'title'))
   ->where('oj.vid IN (:vids)', array(':vids' => $vids))
   ->execute();
 
