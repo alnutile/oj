@@ -1,0 +1,54 @@
+<?php
+
+function oj_schema(){
+
+  $schema['oj_count_and_type'] = array(
+    'description' => 'Track the Products to add Count and Type to for Tokens',
+    'fields' => array(
+      'uid'  => array(
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary Key',
+      ),
+      'nid' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Product ID',
+      ),
+      'vid' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Revision ID if needed',
+      ),
+      'count' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Number of Nodes to make',
+      ),      
+      'type' => array(
+        'type' => 'varchar',
+        'length' => '64',
+        'not null' => TRUE,
+        'description' => 'Type of Node to make',
+      ),
+      'title' => array(
+        'type' => 'varchar',
+        'length' => '128',
+        'not null' => TRUE,
+        'description' => 'Default Title',
+      ),
+    ),
+    'primary key' => array('uid'),
+    'indexes' => array(
+      'nid'   => array('nid'),
+    ),
+  );
+
+
+  return $schema;
+  
+  
+}

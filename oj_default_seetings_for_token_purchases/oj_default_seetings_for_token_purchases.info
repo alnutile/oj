@@ -1,0 +1,12 @@
+name = OJ Default Seetings for Token Purchases
+description = Setting for this to work, default to Articles for now
+core = 7.x
+package = OJ
+version = 7.x-1.1
+project = oj_default_seetings_for_token_purchases
+dependencies[] = features
+dependencies[] = oj
+dependencies[] = override_node_options
+dependencies[] = rules
+features[features_api][] = api:1
+features[user_role][] = member
