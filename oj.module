@@ -1,0 +1,211 @@
+<?php
+
+/**
+ * @file 
+ * Quick feed needed for YOURMOD module
+ */
+ 
+/**
+ * Implementation of hook_menu().
+ */
+function oj_menu() {
+
+  $items['admin/config/ojsettings'] = array(
+    'title' => 'OJ Settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('oj_admin_form'),
+    'access arguments' => array('administer nodes'),
+  );
+  
+  return $items;
+}
+
+
+function oj_admin_form() {
+
+  $form['help'] = array(
+    '#markup' => "
+    <p>
+      Make sure to set the Product to watch for in the Rules area for Ubercart. The Rule is Labeled <b>\"Make node for purchase level\"</b>
+      <a href=\"/admin/config/workflow/rules/reaction/manage/rules_make_node_for_purchase_level\" target=\"_blank\">[rules area]</a>
+      </br>
+      <h2>Check an order's products</h2>
+      Is the rule you will add Products too. See below for an example image.
+      For each of those products make sure to set the node # there to create. By default the number below will be used if none is set.
+    </p>
+    <p>  
+      So now when that items is purchased and Paypal marks it complete it will make these nodes for the user to edit and will not allow them 
+      to create more. 
+    </p>
+    ",
+  );
+  
+  $form['membership'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Number of Nodes'),
+    '#description' => 'How many nodes does the user get to create upon Membership 
+          level purchase. Also what should the title be of those nodes.',
+  );
+
+  
+  $form['membership']['node_type'] = array(
+    '#type' => 'select',
+    '#options' => node_type_get_names(),
+    '#empty_value' => '999999',
+    '#empty_option' => '--select--',
+    '#default_value' => variable_get('og_node_type', '999999'),
+    '#title' => t('Node Type to Make'),
+  );
+  
+  $form['membership']['number'] = array(
+    '#type' => 'textfield',
+    '#default_value' => variable_get('og_mem_number', ''),
+    '#title' => t('Number of Nodes for default if product does not have the number set.'),
+  );
+
+  $form['membership']['title'] = array(
+    '#type' => 'textfield',
+    '#default_value' => variable_get('og_mem_title', ''),
+    '#title' => t('Default Title of new Node'),
+  );
+  
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Submit',
+  );
+  
+  return $form;
+}
+
+
+function oj_admin_form_submit($form, &$form_state) {
+  drupal_set_message('Your settings have been saved');
+  variable_set('og_mem_number', $form_state['values']['number']);
+  variable_set('og_mem_title', $form_state['values']['title']);  
+  variable_set('og_node_type', $form_state['values']['node_type']);
+  $form_state['rebuild'] = TRUE;
+  
+}
+
+/**
+ * After an order is marked complete
+ * This function will check the orders products
+ * to see if any of them have a "Number" value to 
+ * trigger nodes to be created.
+ */
+function og_add_nodes_for_user($order){
+  foreach($order->products as $key){
+    $product = node_load($key->nid);
+    //Check if this node has a QTY field to start the process
+    if  (isset($product->field_number_of_nodes_to_create) && isset($product->field_node_type_to_create)) {
+      //Now to check if it has data
+      if (array_key_exists('und', $product->field_number_of_nodes_to_create)) {
+        $number = $product->field_number_of_nodes_to_create['und'][0]['value'];
+        $type = $product->field_node_type_to_create['und'][0]['value'];
+        //Make the nodes
+        og_make_nodes($type, $number, $order);
+      }
+    }
+  }
+} 
+
+
+/**
+ * Make nodes of certain type
+ * @param the type of node
+ * @param howmany
+ * @param order object to get user
+ */
+function og_make_nodes($type, $howmany, $order) {
+  $account = user_load($order->uid);
+  $title = variable_get('og_mem_title', 'Unpublished Token ');
+  if($howmany > 0) {
+    $start = 1;
+    for($start; $start <= $howmany; $start++){
+        $node = new stdClass();
+        $node->language = 'und';
+        $node->type = $type;
+      	node_object_prepare($node);
+      	$node->uid = $account->uid;
+      	$node->name = $account->name;
+      	$node->title = "$title $start";
+      	$node->status = 0;
+      	$node->promote = 0;
+      	$node->revision = $account->uid;
+      	$node->changed = $_SERVER['REQUEST_TIME'];
+      	$node->created = $_SERVER['REQUEST_TIME'];
+      	node_submit($node);
+      	node_save($node);	      	
+    }
+  }
+}
+
+/**
+ * Place the users nodes list on their USER page
+ */
+function oj_user_nodes($account){
+  $header = array(
+    array('data' => t('Title')),
+    array('data' => t('View')),
+  );
+  
+  $node_type = variable_get('og_node_type', 'page');
+  $query = db_select('node', 'n')->extend('PagerDefault');
+  $query->fields('n', array('nid', 'title'));
+  $query->condition('n.type', $node_type, 'LIKE');
+  $query->condition('n.uid', $account->uid, '=');
+  $result = $query
+    ->limit(20) 
+    ->orderBy('n.title')
+    ->execute();
+  $rows = array();
+
+  foreach($result as $row){
+    $link = l($row->title, 'node/' . $row->nid);
+    $view = l('view', 'node/' . $row->nid);
+    $rows[] = array('data' => array($link, $view));
+  }
+  
+  $build['pager_table'] = array(
+    '#theme' => 'table',
+    '#header' => $header,
+    '#rows' => $rows,
+    '#empty' => t('There are no date formats found in the db'),
+  );  
+
+  $build['pager_pager'] = array('#theme' => 'pager');
+
+  return $build;
+}
+
+
+
+/**
+ * Implements hook_user_view().
+ */
+function oj_user_view($account, $view_mode) {
+  global $user;
+    $pages = render(oj_user_nodes($account));
+    $account->content['summary']['membernodes'] = array(
+      '#type' => 'user_profile_item',
+      '#title' => t('Member Pages'),
+      '#markup' => $pages,
+    );
+}
+
+/**
+ * Set the node types list to 
+ * allow the user to choose
+ * which one to create
+ */
+function oj_form_alter(&$form, &$form_state) {
+  if($form['#form_id'] == 'product_node_form') {
+    //See if the field is there yet
+    if(array_key_exists('field_node_type_to_create', $form)) {
+      $options = node_type_get_names();
+      $form['field_node_type_to_create']['und']['#options'] = $options; 
+    }
+  }
+}
+
+

@@ -1,0 +1,10 @@
+name = OJ Functions
+description = Misc Features needed by OJ
+core = 7.x
+configure = admin/config/ojsettings;
+
+
+dependencies[] = uc_product
+dependencies[] = rules
+dependencies[] = uc_recurring
+dependencies[] = override_node_options
